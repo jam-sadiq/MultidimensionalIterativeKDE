@@ -584,24 +584,16 @@ for i in range(opts.end_iter - opts.start_iter):
 
     else:  
         # ========== FULL 3D KDE METHOD ==========
-        # Create symmetric samples manually
-        samples2 = np.vstack((m2, m1, cf)).T
-        symmetric_samples = np.vstack((samples, samples2))
-
-        # Duplicate weights
-        if weights is not None:
-            weights = np.tile(weights, 2)
-
-        # Create 3D KDE
         if 'perpoint_bws' in group:
             per_point_bandwidth = group['perpoint_bws'][...]
             train_kde = kde.VariableBwKDEPy(
-                symmetric_samples,
+                samples,
                 weights,
                 input_transf=('log', 'log', 'none'),
                 stdize=True,
                 rescale=[1/bwx, 1/bwy, 1/bwz],
-                bandwidth=np.tile(per_point_bandwidth, 2)
+                symmetrize_dims=[0,1],
+                bandwidth=per_point_bandwidth
             )
         else:
             train_kde = akde.AdaptiveBwKDE(
@@ -610,6 +602,7 @@ for i in range(opts.end_iter - opts.start_iter):
                 input_transf=('log', 'log', 'none'),
                 stdize=True,
                 rescale=[1/bwx, 1/bwy, 1/bwz],
+                symmetrize_dims=[0,1],
                 alpha=alpha
             )
 
