@@ -10,8 +10,7 @@ from matplotlib.colors import PowerNorm
 from astropy.cosmology import FlatLambdaCDM, z_at_value
 import astropy.units as u
 import utils_plot as u_plot
-#from cbc_pdet import gwtc_found_inj  as pdet_fit
-from cbc_pdet import o123_class_found_inj_general  as pdet_fit
+from cbc_pdet import gwtc_found_inj as pdet_fit
 
 
 # Set Matplotlib parameters
@@ -41,7 +40,7 @@ parser.add_argument('--samples-redshift', help='h5 file containing N samples of 
 parser.add_argument('--samples-dl', help='h5 file containing N samples of dL for each event')
 parser.add_argument('--samples-vt', help='h5 file containing VT calculated at each sample')
 parser.add_argument('--pdet-runs', help='Observing runs to derive VT from p_det fits for, eg "o123", "o4"')
-parser.add_argument('--injectionfile',  help='h5 injection file from GWTC3 public data', default='endo3_bbhpop-LIGO-T2100113-v12.hdf5')
+parser.add_argument('--injectionfile', help='h5 injection file from GWTC3 public data', default='endo3_bbhpop-LIGO-T2100113-v12.hdf5')
 
 # PE prior
 parser.add_argument('--redshift-prior-power', type=float, default=2.,
@@ -55,7 +54,7 @@ parser.add_argument('--min-bw3', default=0.01, type=float, help='Set a minimum b
 # Buffer iterations
 parser.add_argument('--buffer-start', default=200, type=int, help='Start iteration for buffer in reweighting')
 parser.add_argument('--buffer-interval', default=100, type=int, help='Size of buffer')
-parser.add_argument('--n-iterations', default=500, type=int, help='Total reweighting iterations after start of buffer')
+parser.add_argument('--n-iterations', type=int, help='Total reweighting iterations after start of buffer')
 
 # Output
 parser.add_argument('--pathplot', default='./', help='public_html path for plots', type=str)
@@ -65,7 +64,7 @@ opts = parser.parse_args()  # Use as global variable
 
 #####################################################################
 
-# Set the prior factors correctly here before reweighting
+# Set the prior factors before reweighting
 prior_kwargs = {'redshift_prior_power': opts.redshift_prior_power}
 print(f"prior powers: {prior_kwargs}")
 
@@ -151,7 +150,7 @@ def prior_factor_function(samples, redshift_vals, redshift_prior_power):
     return prior_factors
 
 
-def get_reweighted_sample(rng, sample, redshiftvals, vt_vals, fpop_kde, prior_factor=prior_factor_function, prior_factor_kwargs={}):
+def get_reweighted_sample(rng, sample, redshiftvals, vt_vals, fpop_kde, prior_func=prior_factor_function, prior_factor_kwargs={}):
     """
     Generate reweighted random sample/samples from the original PE samples
 
@@ -173,7 +172,7 @@ def get_reweighted_sample(rng, sample, redshiftvals, vt_vals, fpop_kde, prior_fa
     fpop_kde : KDE object
         A kernel density estimate (KDE) object that models the detected event distribution.
 
-    prior_factor : callable
+    prior_func : callable
         A function that calculates the prior factor for each sample, typically dependent on the redshift.
 
     prior_factor_kwargs : dict
@@ -192,7 +191,7 @@ def get_reweighted_sample(rng, sample, redshiftvals, vt_vals, fpop_kde, prior_fa
     fkde_samples = fpop_kde.evaluate_with_transf(sample) / vt_vals
 
     # Adjust probabilities based on the prior factor
-    frate_atsample = fkde_samples * prior_factor(sample, redshiftvals, **prior_factor_kwargs)
+    frate_atsample = fkde_samples * prior_func(sample, redshiftvals, **prior_factor_kwargs)
     # Normalize
     fpop_at_samples = frate_atsample / frate_atsample.sum()
 
@@ -321,7 +320,7 @@ elif opts.pdet_runs == 'o4':
 vth5file = h5.File(opts.samples_vt, "a")  # create if file does not exist
 vtlists = []
 
-for k in d1.keys():
+for evid, k in enumerate(d1.keys()):
     eventlist.append(k)
 
     # These events' PE had some 'too-distant' samples with extremely small pdet
@@ -358,9 +357,9 @@ for k in d1.keys():
 
     try:
         vt_val = vth5file[k][:]
-        print('Got VT from file for', k)
+        print('eventid', evid, ': got VT from file for', k)
     except:
-        print('Calculating pdet for', k)
+        print('eventid', evid, ': Calculating pdet for', k)
         vt_val = np.zeros(len(m1det_val))
         for i in range(len(m1det_val)):
             vt_val[i] = sensitivity(m1_val[i], m2_val[i], chieff=chieff_val[i])
@@ -383,9 +382,9 @@ flat_samples1 = np.concatenate(sampleslists1).flatten()
 flat_samples2 = np.concatenate(sampleslists2).flatten()
 flat_samples3 = np.concatenate(sampleslists3).flatten()
 flat_vtlist = np.concatenate(vtlists).flatten()
-print("min max m1 =", np.min(flat_samples1), np.max(flat_samples1))
-print("min max m2 =", np.min(flat_samples2), np.max(flat_samples2))
-print("min max chieff =", np.min(flat_samples3), np.max(flat_samples3))
+#print("min max m1 =", np.min(flat_samples1), np.max(flat_samples1))
+#print("min max m2 =", np.min(flat_samples2), np.max(flat_samples2))
+#print("min max chieff =", np.min(flat_samples3), np.max(flat_samples3))
 
 # 1d histograms
 for i, tupl in enumerate(zip([flat_samples1, flat_samples2, flat_samples3], [True, True, False])):
@@ -433,10 +432,6 @@ u_plot.plot_pdet_3Dscatter(flat_samples1, flat_samples2, flat_samples3, flat_vtl
 sampleslists = np.vstack((flat_samples1, flat_samples2, flat_samples3)).T
 mean_sample = np.vstack((mean1, mean2, mean3)).T
 
-### Iterative reweighting algorithm
-discard = opts.buffer_start   # how many iterations to discard
-Nbuffer = opts.buffer_interval # how many previous iterations to average over in reweighting
-
 init_rescale = [3., 3., 3.]
 init_alpha = 0.5
 
@@ -452,6 +447,8 @@ def Neff(weights):
     return w.sum() ** 2. / (w ** 2.).sum()
 
 ### Iterative reweighting algorithm
+discard = opts.buffer_start   # how many iterations to discard
+Nbuffer = opts.buffer_interval # how many previous iterations to average over in reweighting
 
 # Save KDE parameters for each subsequent iteration in HDF file
 frateh5 = h5.File(opts.output_filename + '_kde_iteration.hdf5', 'a')
@@ -467,12 +464,9 @@ iterbwz = []
 iteralp = []
 iterminneff = []
 
-discard = opts.buffer_start   # how many iterations to discard
-Nbuffer = opts.buffer_interval # how many previous iterations to average over in reweighting
-
 # Initialize buffer to store last Nbuffer iterations of f(samples) for each event
 num_events = len(mean1)
-buffers = [[] for _ in range(num_events)]
+buffers = [[] for _ in range(num_events)]  # List of arrays of KDE values at samples for each event
 
 rng = np.random.default_rng()
 for i in range(opts.n_iterations + discard):  # eg 500 + 200
@@ -507,7 +501,7 @@ for i in range(opts.n_iterations + discard):  # eg 500 + 200
     current_kde, optbw, optalp = get_kde_obj_eval(np.array(rwsamples), np.array(boots_weights), init_rescale, init_alpha, mass_symmetry=True, input_transf=('log', 'log', 'none'), minbw3=opts.min_bw3)
     # Get perpoint bandwidths
     perpointbws = current_kde.bandwidth[:len(rwsamples)]
-    print("opt bw", optbw, "opt alpha", optalp, 'Neff min/max', np.min(rw_neff), np.max(rw_neff), 'min Neff eventid', np.argmin(rw_neff))
+    print("opt bw", optbw, "opt alpha", optalp, 'Neff min/max', np.min(rw_neff), np.max(rw_neff), 'min eventid', np.argmin(rw_neff))
 
     group = frateh5.create_group(f'iteration_{i}')
 
