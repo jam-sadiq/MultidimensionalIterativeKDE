@@ -4,7 +4,7 @@ import argparse
 import h5py as h5
 from scipy.integrate import quad, simpson
 from scipy.interpolate import RegularGridInterpolator
-#from matplotlib import use; use('agg')
+from matplotlib import use; use('agg')
 from matplotlib import rcParams
 from popde import density_estimate as kde, adaptive_kde as akde
 import utils_plot as u_plot
@@ -307,6 +307,7 @@ def create_marginalized_kde(
             symmetrize_dims=symmetrize_dims
         )
 
+
     # Step 5: Evaluate KDE
     eval_kde = train_kde.evaluate_with_transf(eval_samples)
 
@@ -402,6 +403,7 @@ eval_samples = np.column_stack([XX.ravel(), YY.ravel(), ZZ.ravel()])
 M, CF = np.meshgrid(m1grid, cfgrid, indexing='ij')
 M1, M2 = np.meshgrid(m1grid, m2grid, indexing='ij')
 
+
 threeDgrid = np.array([XX.ravel(), YY.ravel(), ZZ.ravel()]).T
 
 ############ Saving data in 3 files #################################
@@ -430,6 +432,7 @@ boots_weighted = False
 vt_weights = False  # Flag to control VT weighting
 
 for i in range(opts.end_iter - opts.start_iter):
+    print(i)
     it = i + opts.discard + opts.start_iter
     ilabel = i + opts.start_iter
     if it % 5 == 0: print(it)
@@ -507,7 +510,7 @@ for i in range(opts.end_iter - opts.start_iter):
         kdeM1chieff = kde_result['kde_values']
         rateM1chieff = compute_rate_from_kde(
             kdeM1chieff, VT_3d,
-            weights_over_VT=weights_over_VT if vt_weights else None,
+            weights_over_VT=weights if vt_weights else None,
             N=Nev,
             vt_weights=vt_weights
         )
@@ -521,7 +524,7 @@ for i in range(opts.end_iter - opts.start_iter):
         kdeM2chieff = kde_result['kde_values']
         rateM2chieff = compute_rate_from_kde(
             kdeM2chieff, VT_3d,
-            weights_over_VT=weights_over_VT if vt_weights else None,
+            weights_over_VT=weights if vt_weights else None,
             N=Nev,
             vt_weights=vt_weights
         )
@@ -535,7 +538,7 @@ for i in range(opts.end_iter - opts.start_iter):
         KDEm1m2 = kde_result['kde_values']
         ratem1m2 = compute_rate_from_kde(
             KDEm1m2, VT_3d,
-            weights_over_VT=weights_over_VT if vt_weights else None,
+            weights_over_VT=weights if vt_weights else None,
             N=Nev,
             vt_weights=vt_weights
         )
@@ -569,7 +572,7 @@ for i in range(opts.end_iter - opts.start_iter):
 
         # Compute 3D rate
         if vt_weights:
-            Rate_3d = weights_over_VT.sum() * KDE_3d
+            Rate_3d = weights.sum() * KDE_3d
         else:
             N = Nev if Nev > 0 else Nboots
             Rate_3d = N * KDE_3d / VT_3d
@@ -578,7 +581,6 @@ for i in range(opts.end_iter - opts.start_iter):
         kdeM1chieff, kdeM2chieff = get_rate_m_chieff2D(m1grid, m2grid, KDE_3d)
         rateM1chieff, rateM2chieff = get_rate_m_chieff2D(m1grid, m2grid, Rate_3d)
         ratem1m2, ratechim1m2, ratechisqm1m2 = integral_wrt_chieff(CF, cfgrid, Rate_3d)
-
     # Get 1d rates over masses by numerically integrating ratem1m2 over m1>m2
     rateM1, rateM2 = get_rate_m_oneD(m1grid, m2grid, ratem1m2)
 
