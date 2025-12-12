@@ -154,7 +154,6 @@ def marginalize_kde_data(data_nd, per_point_bw, keep_dims,
         raise ValueError(f"keep_dims must be in range [0, {n_dims-1}]")
 
     kept_names = [dimension_names[i] for i in keep_dims]
-    removed_names = [dimension_names[i] for i in range(n_dims) if i not in keep_dims]
 
     # 1. Marginalize data (just select columns)
     data_marginalized = data_nd[:, keep_dims]
