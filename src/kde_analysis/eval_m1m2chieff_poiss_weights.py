@@ -226,9 +226,9 @@ def create_marginalized_kde(
     Returns
     -------
     dict with keys:
-        'kde_values': Evaluated KDE on grid (shape depends on n_dims)
+        'kde_values': Evaluated KDE on grid of remaining dimentions
         'grid_shape': Shape of the grid
-        'eval_samples': Flattened evaluation samples
+        'eval_samples': Evaluation samples for KDE
         'marginalized_result': Output from marginalize_kde_data
         'kde_object': The trained KDE object
     """
@@ -236,7 +236,6 @@ def create_marginalized_kde(
     if dimension_names is None:
         dimension_names = ['m1', 'm2', 'chieff']
 
-    # Grid mapping
     grid_map = {0: m1grid, 1: m2grid, 2: cfgrid}
 
     n_dims = len(keep_dims)
