@@ -241,7 +241,7 @@ def create_marginalized_kde(
     n_dims = len(keep_dims)
 
     # Step 1: Marginalize the data 
-    result = marginalize_kde_data(
+    marg_data = marginalize_kde_data(
         data_nd=samples,
         per_point_bw=per_point_bw,
         keep_dims=keep_dims,
@@ -286,21 +286,21 @@ def create_marginalized_kde(
     # Step 4: Create KDE with symmetrization if needed
     if 'perpoint_bws' in group:
         train_kde = kde.VariableBwKDEPy(
-            result['data'],
-            result['weights'],
-            input_transf=result['input_transf'],
+            marg_data['data'],
+            marg_data['weights'],
+            input_transf=marg_data['input_transf'],
             stdize=True,
-            rescale=result['rescale'],
-            bandwidth=result['bandwidth'],
+            rescale=marg_data['rescale'],
+            bandwidth=marg_data['bandwidth'],
             symmetrize_dims=symmetrize_dims
         )
     else:
         train_kde = akde.AdaptiveBwKDE(
-            result['data'],
-            result['weights'],
-            input_transf=result['input_transf'],
+            marg_data['data'],
+            marg_data['weights'],
+            input_transf=marg_data['input_transf'],
             stdize=True,
-            rescale=result['rescale'],
+            rescale=marg_data['rescale'],
             alpha=alpha,
             symmetrize_dims=symmetrize_dims
         )
@@ -318,7 +318,7 @@ def create_marginalized_kde(
         'kde_values': KDE_values,
         'grid_shape': grid_shape,
         'eval_samples': eval_samples,
-        'marginalized_result': result,
+        'marginalized_result': marg_data,
         'kde_object': train_kde
     }
 
