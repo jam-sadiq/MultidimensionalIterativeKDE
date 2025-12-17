@@ -467,7 +467,7 @@ def Neff(weights):
 discard = opts.buffer_start   # how many iterations to discard
 Nbuffer = opts.buffer_interval # how many previous iterations to average over in reweighting
 
-# Save KDE parameters for each subsequent iteration in HDF file
+# Save KDE parameters for each subsequent iteration in hdf file
 frateh5 = h5.File(opts.output_filename + '_kde_iteration.hdf5', 'a')
 
 # Start by recording options
@@ -524,14 +524,13 @@ for i in range(opts.n_iterations + discard):
         current_kde, optbw, optalp = get_kde_obj_eval(np.array(rwsamples), boots_weights, init_rescale, init_alpha, mass_symmetry=True, input_transf=('log', 'log', 'none'), minbw3=opts.min_bw3)
     except ValueError as verr:
         print(verr)
-        print('bootstrap weights:', boots_weights)
+        print('min bootstrap weight', boots_weights.min())
         # Set smallest weight to 0, ie omit the sample, and try again
         boots_weights[boots_weights.argmin()] = 0.
-        print('new weights:', boots_weights)
         try:  # failsafe at the expense of repeating a KDE
             current_kde, optbw, optalp = get_kde_obj_eval(np.array(rwsamples), boots_weights, init_rescale, init_alpha, mass_symmetry=True, input_transf=('log', 'log', 'none'), minbw3=opts.min_bw3)
         except ValueError:
-            print('Giving up, keeping KDE unchanged this iteration!')
+            print(f'min weight still too small {boots_weights.min()} - giving up, keeping KDE unchanged this iteration!')
             current_kde, optbw, optalp = current_kde, optbw, optalp
 
     # Get per point bandwidths

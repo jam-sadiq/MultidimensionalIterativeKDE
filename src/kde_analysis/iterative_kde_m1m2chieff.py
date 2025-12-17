@@ -279,12 +279,13 @@ def get_kde_obj_eval(sample, bs_weights, rescale_arr, alpha, input_transf=('log'
 
 run_opt = 'o4' if opts.pdet_runs == 'o4' else 'o3'
 print(run_opt)
+injsources = 'all' if run_opt == 'o4' else 'bbh'
 dmid_fun = 'Dmid_mchirp_fdmid_fspin'
 emax_fun = 'emax_exp'
 pdet = pdet_fit.Found_injections(dmid_fun=dmid_fun, emax_fun=emax_fun, alpha_vary=None, ini_files=None)
-pdet.get_opt_params(run_opt, rescale_o3=False)
+pdet.get_opt_params(run_opt, sources=injsources, rescale_o3=False)
 pdet.set_shape_params()
-pdet.load_inj_set(run_opt)
+pdet.load_inj_set(run_opt, source=injsources)
 
 fz = h5.File(opts.samples_redshift, 'r')
 dz = fz['randdata']
@@ -450,7 +451,7 @@ def Neff(weights):
 discard = opts.buffer_start   # how many iterations to discard
 Nbuffer = opts.buffer_interval # how many previous iterations to average over in reweighting
 
-# Save KDE parameters for each subsequent iteration in HDF file
+# Save KDE parameters for each subsequent iteration in hdf file
 frateh5 = h5.File(opts.output_filename + '_kde_iteration.hdf5', 'a')
 
 # Start by recording options
