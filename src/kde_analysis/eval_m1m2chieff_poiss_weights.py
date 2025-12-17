@@ -38,7 +38,7 @@ parser.add_argument('--vt-file', required=True, help='VT grid hdf file')
 parser.add_argument('--vt-multiplier', type=float, help='Multiplier to scale VTs up/down')
 
 # Iterative options
-parser.add_argument('--discard', default=100, type=int, help='discard first DISCARD iterations')
+parser.add_argument('--discard', default=0, type=int, help='discard first DISCARD iterations')
 parser.add_argument('--start-iter', type=int, help='start at iteration START_ITER after discards')
 parser.add_argument('--end-iter', type=int, help='end at iteration END_ITER after discards')
 parser.add_argument('--integrate-kde', type=str, default='marginalized', choices=['marginalized', 'numeric'], help='KDE integration method: "marginalized" (integrate analytically) or "numeric" (3D KDE then numerical integration)')
