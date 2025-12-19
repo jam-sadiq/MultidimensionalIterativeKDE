@@ -26,6 +26,7 @@ rcParams.update({
     "grid.linewidth": 1.0,
     "grid.alpha": 0.6
 })
+#'''
 
 parser = argparse.ArgumentParser(description=__doc__)
 # Input data
@@ -127,7 +128,7 @@ def marginalize_kde_data(data_nd, per_point_bw, keep_dims,
     per_point_bw : np.ndarray, shape (n_samples,)
         Scalar per-point bandwidth factors
     keep_dims : list or array-like
-        Indices of dimensions to KEEP (others integrated out)
+        Indices of dimensions to keep (others integrated out)
     input_transf : tuple, optional
         Transformations per dimension (e.g., ('log', 'log', 'none'))
     rescale_factors : list, optional
@@ -141,7 +142,6 @@ def marginalize_kde_data(data_nd, per_point_bw, keep_dims,
     -------
     dict with marginalized parameters
     """
-
     keep_dims = np.atleast_1d(keep_dims).astype(int)
     n_samples, n_dims = data_nd.shape
     n_keep = len(keep_dims)
@@ -155,16 +155,16 @@ def marginalize_kde_data(data_nd, per_point_bw, keep_dims,
 
     kept_names = [dimension_names[i] for i in keep_dims]
 
-    # 1. Marginalize data (just select columns)
+    # Marginalize data (just select columns)
     data_marginalized = data_nd[:, keep_dims]
 
-    # 2. Marginalize transformations
+    # Marginalize transformations
     if input_transf is not None:
         input_transf_marg = tuple(input_transf[i] for i in keep_dims)
     else:
         input_transf_marg = None
 
-    # 3. Marginalize rescale factors
+    # Marginalize rescale factors
     if rescale_factors is not None:
         rescale_marg = [rescale_factors[i] for i in keep_dims]
     else:
@@ -232,12 +232,9 @@ def create_marginalized_kde(
         'marginalized_result': Output from marginalize_kde_data
         'kde_object': The trained KDE object
     """
-
     if dimension_names is None:
         dimension_names = ['m1', 'm2', 'chieff']
-
-    grid_map = {0: m1grid, 1: m2grid, 2: cfgrid}
-
+    keep_dims = list(keep_dims)
     n_dims = len(keep_dims)
 
     marg_data = marginalize_kde_data(
@@ -254,7 +251,6 @@ def create_marginalized_kde(
     # and when they're the first two dimensions in the marginalized space
     if (0 in keep_dims) and (1 in keep_dims):
         # Map original dims 0,1 to their positions in the marginalized space
-        keep_dims = list(keep_dims)
         sym_dim_0 = keep_dims.index(0)
         sym_dim_1 = keep_dims.index(1)
         symmetrize_dims = [sym_dim_0, sym_dim_1]
@@ -262,6 +258,7 @@ def create_marginalized_kde(
         symmetrize_dims = None
 
     # Create evaluation grid
+    grid_map = {0: m1grid, 1: m2grid, 2: cfgrid}
     grids_to_use = [grid_map[dim] for dim in keep_dims]
 
     if n_dims == 1:
@@ -300,7 +297,6 @@ def create_marginalized_kde(
             alpha=alpha,
             symmetrize_dims=symmetrize_dims
         )
-
 
     # Evaluate KDE
     eval_kde = train_kde.evaluate_with_transf(eval_samples)
@@ -393,14 +389,11 @@ hdf = h5.File(opts.iterative_result, 'r')
 XX, YY, ZZ = np.meshgrid(m1grid, m2grid, cfgrid, indexing='ij')
 eval_samples = np.column_stack([XX.ravel(), YY.ravel(), ZZ.ravel()])
 
-######## For 2D plots ##############################
+######## For 2D plots #############################
 M, CF = np.meshgrid(m1grid, cfgrid, indexing='ij')
 M1, M2 = np.meshgrid(m1grid, m2grid, indexing='ij')
 
-
-threeDgrid = np.array([XX.ravel(), YY.ravel(), ZZ.ravel()]).T
-
-############ Saving data in 3 files #################################
+############ Saving data in 3 files #############################
 hfintegm1m2 = h5.File(opts.output_tag + "_int_dchieff.hdf5", "w")
 hfintegm1chieff = h5.File(opts.output_tag + "_int_dm2.hdf5", "w")
 hfintegm2chieff = h5.File(opts.output_tag + "_int_dm1.hdf5", "w")
@@ -453,7 +446,8 @@ for i in range(opts.end_iter - opts.start_iter):
         # adaptive KDE (due to extremely small pilot density at the sample location)
         # and have no effect on the KDE, and to reduce compute cost
         samples = samples[weights > 0., :]
-        if vt_weights: vt_vals = vt_vals[weights > 0.]
+        if vt_weights:
+            vt_vals = vt_vals[weights > 0.]
         # Make sure all arrays are the same length
         weights = weights[weights > 0.]
 
@@ -464,12 +458,11 @@ for i in range(opts.end_iter - opts.start_iter):
     # Check symmetric dimensions: bwx vs bwy for m1-m2 symmetry
     if not np.isclose(bwx, bwy, rtol=1e-8, atol=0.0):
         print(f"WARNING: bwx != bwy (bwx={bwx}, bwy={bwy}). Setting both to geometric mean.")
-        gm = (bwx * bwy) ** 0.5  # valid for [0, 1]
-        bwx = gm
-        bwy = gm
-    # Create the KDE with mass symmetry
-    m1 = samples[:, 0]  # First column corresponds to m1
-    m2 = samples[:, 1]  # Second column corresponds to m2
+        gm = (bwx * bwy) ** 0.5
+        bwx = gm; bwy = gm
+
+    m1 = samples[:, 0]
+    m2 = samples[:, 1]
     cf = samples[:, 2]
 
     # Determine weights based on vt_weights flag
@@ -482,7 +475,7 @@ for i in range(opts.end_iter - opts.start_iter):
         weights = None
 
     if opts.integrate_kde == 'marginalized':
-    # ========== MARGINALIZED KDE METHOD ==========
+        # ========== MARGINALIZED KDE METHOD ==========
         per_point_bandwidth = group['perpoint_bws'][...]
 
         # Common parameters for all KDE calls
@@ -540,7 +533,8 @@ for i in range(opts.end_iter - opts.start_iter):
             N=Nev,
             vt_weights=vt_weights
         )
-    else:  
+
+    else:
         # ========== FULL 3D KDE METHOD ==========
         if 'perpoint_bws' in group:
             per_point_bandwidth = group['perpoint_bws'][...]
@@ -579,9 +573,9 @@ for i in range(opts.end_iter - opts.start_iter):
         kdeM1chieff, kdeM2chieff = get_rate_m_chieff2D(m1grid, m2grid, KDE_3d)
         rateM1chieff, rateM2chieff = get_rate_m_chieff2D(m1grid, m2grid, Rate_3d)
         ratem1m2, ratechim1m2, ratechisqm1m2 = integral_wrt_chieff(CF, cfgrid, Rate_3d)
+
     # Get 1d rates over masses by numerically integrating ratem1m2 over m1>m2
     rateM1, rateM2 = get_rate_m_oneD(m1grid, m2grid, ratem1m2)
-
 
     KDEM1chieff.append(kdeM1chieff)
     KDEM2chieff.append(kdeM2chieff)
@@ -590,13 +584,13 @@ for i in range(opts.end_iter - opts.start_iter):
     rate_m1m2.append(ratem1m2)
     ratem1_arr.append(rateM1)
     ratem2_arr.append(rateM2)
+
     hfintegm1m2.create_dataset(f"rate_m1m2_iter{ilabel}", data=ratem1m2)
     hfintegm1chieff.create_dataset(f"rate_m1cf_iter{ilabel}", data=rateM1chieff)
     hfintegm2chieff.create_dataset(f"rate_m2cf_iter{ilabel}", data=rateM2chieff)
 
     hfintegm1chieff.create_dataset(f"kde_m1cf_iter{ilabel}", data=kdeM1chieff)
     hfintegm2chieff.create_dataset(f"kde_m2cf_iter{ilabel}", data=kdeM2chieff)
-    
 
     if opts.integrate_kde == 'numeric':
         hfintegm1m2.create_dataset(f"rate_chim1m2_iter{ilabel}", data=ratechim1m2)
