@@ -351,7 +351,7 @@ def compute_rate_from_kde(KDE, VT=None, weights_over_VT=None, N=None, vt_weights
         # KDE kernels are weighted by 1/VT
         Rate = weights_over_VT.sum() * KDE
     else:
-        if N is None or VT is None::
+        if N is None or VT is None:
             raise ValueError("N and VT must both be provided when vt_weights=False")
         Rate = N * KDE / VT
 
