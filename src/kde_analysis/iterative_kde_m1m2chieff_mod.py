@@ -262,19 +262,15 @@ def get_kde_obj_eval(sample, bs_weights, rescale_arr, alpha, input_transf=('log'
         sample = sample[bs_weights > 0., :]
         bs_weights = bs_weights[bs_weights > 0.]
 
-    # Apply m1-m2 symmetry in the samples before fitting
-    if mass_symmetry:
-        m1 = sample[:, 0]  # First column
-        m2 = sample[:, 1]  # Second column
-        chieff = sample[:, 2]  # Third column
-        sample2 = np.vstack((m2, m1, chieff)).T
-        # Combine both samples into one array
-        sample = np.vstack((sample, sample2))
-        # Double the weights for bootstrap uncertainty
-        bs_weights = np.concatenate((bs_weights, bs_weights)) if (bs_weights is not None) else None
+    # Apply m1-m2 symmetry in the samples when making KDEs
+    symm_dims = [0, 1] if mass_symmetry else None
 
-    kde_object = ad.KDERescaleOptimization(sample, bs_weights, stdize=True, rescale=rescale_arr, alpha=alpha, dim_names=['lnm1', 'lnm2', 'chieff'], input_transf=input_transf)
-    dictopt, score = kde_object.optimize_rescale_parameters(rescale_arr, alpha, bounds=((0.01, 100), (0.01, 100), (0.01, 1./ minbw3), (0, 1)), disp=False)  # don't display messages
+    kde_object = ad.KDERescaleOptimization(sample, bs_weights, input_transf=input_transf, stdize=True,
+        rescale=rescale_arr, symmetrize_dims=symm_dims, alpha=alpha, dim_names=['lnm1', 'lnm2', 'chieff']
+    )
+    dictopt, score = kde_object.optimize_rescale_parameters(
+        rescale_arr, alpha, bounds=((0.01, 100), (0.01, 100), (0.01, 1./ minbw3), (0, 1)), disp=False
+    )  # don't display messages
     optbwds = 1. / dictopt[0:-1]
     optalpha = dictopt[-1]
 

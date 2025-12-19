@@ -16,12 +16,12 @@ rcParams.update({
     "text.usetex": True,
     "font.serif": "Computer Modern",
     "font.family": "Serif",
-    "xtick.labelsize": 18,
-    "ytick.labelsize": 18,
-    "xtick.direction": "in",
-    "ytick.direction": "in",
-    "legend.fontsize": 18,
-    "axes.labelsize": 18,
+    "xtick.labelsize": 13,
+    "ytick.labelsize": 13,
+    "xtick.direction": "out",
+    "ytick.direction": "out",
+    "legend.fontsize": 13,
+    "axes.labelsize": 13,
     "axes.grid": True,
     "grid.color": 'grey',
     "grid.linewidth": 1.0,
@@ -83,6 +83,11 @@ for i in range(opts.end_iter - opts.start_iter):
 flat_samples1 = np.concatenate(flat_samples1)
 flat_samples2 = np.concatenate(flat_samples2)
 flat_samples3 = np.concatenate(flat_samples3)
+
+#myfilt = (flat_samples3 > 0.75) & (abs((flat_samples1) - 30) < 5)
+#print(flat_samples1[myfilt])
+#print(flat_samples2[myfilt])
+#print(flat_samples3[myfilt])
 
 tag = '_' + opts.tag if len(opts.tag) else '' 
 

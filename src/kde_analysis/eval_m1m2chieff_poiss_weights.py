@@ -433,7 +433,7 @@ for i in range(opts.end_iter - opts.start_iter):
         boots_weighted = True
         weights = group['bootstrap_weights'][:]
         # Allow zero weights as corner case
-#       assert min(weights) > 0, "Some bootstrap weights are non-positive!"
+#        assert min(weights) > 0, "Some bootstrap weights are non-positive!"
         Nboots = weights.sum()  # Number of events in bootstrap
 
     # Check if VT weighting should be used
