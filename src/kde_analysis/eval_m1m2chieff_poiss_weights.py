@@ -464,7 +464,7 @@ for i in range(opts.end_iter - opts.start_iter):
     # Check symmetric dimensions: bwx vs bwy for m1-m2 symmetry
     if not np.isclose(bwx, bwy, rtol=1e-8, atol=0.0):
         print(f"WARNING: bwx != bwy (bwx={bwx}, bwy={bwy}). Setting both to geometric mean.")
-        gm = (bwx * bwy)**0.5  # valid for [0, 1]
+        gm = (bwx * bwy) ** 0.5  # valid for [0, 1]
         bwx = gm
         bwy = gm
     # Create the KDE with mass symmetry
