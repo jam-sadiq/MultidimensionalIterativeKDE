@@ -302,7 +302,7 @@ def create_marginalized_kde(
         )
 
 
-    # Step 5: Evaluate KDE
+    # Evaluate KDE
     eval_kde = train_kde.evaluate_with_transf(eval_samples)
 
     if n_dims == 1:
@@ -319,16 +319,16 @@ def create_marginalized_kde(
     }
 
 
-def compute_rate_from_kde(KDE, VT, weights_over_VT=None, N=None, vt_weights=True):
+def compute_rate_from_kde(KDE, VT=None, weights_over_VT=None, N=None, vt_weights=True):
     """
     Compute merger rate from KDE using the same weighting scheme.
     
     Parameters
-    ----------
+    ---------
     KDE : np.ndarray
         KDE values on grid (can be 1D, 2D, or 3D)
-    VT : np.ndarray
-        Survey volume-time on the same grid
+    VT : np.ndarray or None
+        Survey volume-time on the same grid (required when vt_weights=False)
     weights_over_VT : np.ndarray or None
         Bootstrap weights divided by VT (if using VT weighting)
     N : int or None
@@ -357,8 +357,8 @@ def compute_rate_from_kde(KDE, VT, weights_over_VT=None, N=None, vt_weights=True
         # KDE kernels are weighted by 1/VT
         Rate = weights_over_VT.sum() * KDE
     else:
-        if N is None:
-            raise ValueError("N must be provided when vt_weights=False")
+        if N is None or VT is None::
+            raise ValueError("N and VT must both be provided when vt_weights=False")
         Rate = N * KDE / VT
 
     return Rate
@@ -462,7 +462,6 @@ for i in range(opts.end_iter - opts.start_iter):
     bwx = group['bwx'][()]
     bwy = group['bwy'][()]
     bwz = group['bwz'][()]
-
     # Create the KDE with mass symmetry
     m1 = samples[:, 0]  # First column corresponds to m1
     m2 = samples[:, 1]  # Second column corresponds to m2
