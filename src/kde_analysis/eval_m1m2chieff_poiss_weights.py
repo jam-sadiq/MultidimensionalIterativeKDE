@@ -203,10 +203,10 @@ def create_marginalized_kde(
     ----------
     samples : np.ndarray, shape (n_samples, 3)
         Original 3D samples
-    per_point_bw : np.ndarray or None, shape (n_samples,)
-        Scalar per-point bandwidth for each sample. If None, uses AdaptiveBwKDE with alpha.
+    per_point_bw : np.ndarray of shape (n_samples,) or None 
+        Scalar per-point bandwidth for each sample.
     keep_dims : list of int
-        Dimensions to keep (e.g., [0,1] for 2D, [0] for 1D, [0,1,2] for 3D)
+        Dimensions to keep, e.g. [0] for 1D, [0,1] for 2D, [0,1,2] for 3D
     input_transf : tuple
         Input transformations for all dimensions
     rescale_factors : list
@@ -215,8 +215,8 @@ def create_marginalized_kde(
         Sample weights
     m1grid, m2grid, cfgrid : np.ndarray
         Grid arrays for each dimension
-    alpha : float
-        Adaptive bandwidth parameter (only used if per_point_bw is None)
+    alpha : float or None
+        Adaptive bandwidth parameter, used if per_point_bw is None
     dimension_names : list, optional
         Names of dimensions (default: ['m1', 'm2', 'chieff'])
 
@@ -233,6 +233,9 @@ def create_marginalized_kde(
         dimension_names = ['m1', 'm2', 'chieff']
     keep_dims = list(keep_dims)
     n_dims = len(keep_dims)
+
+    if (per_point_bw is not None) and (alpha is not None):
+        raise ValueError("Can't provide both per-point bandwidths and alpha!")
 
     marg_data = marginalize_kde_data(
         data_nd=samples,
@@ -485,7 +488,7 @@ for i in range(opts.end_iter - opts.start_iter):
             'm1grid': m1grid,
             'm2grid': m2grid,
             'cfgrid': cfgrid,
-            'alpha': alpha,
+            'alpha': None,
             'dimension_names': ['m1', 'm2', 'chieff']
         }
 
