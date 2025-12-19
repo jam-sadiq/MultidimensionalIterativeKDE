@@ -240,7 +240,6 @@ def create_marginalized_kde(
 
     n_dims = len(keep_dims)
 
-    # Step 1: Marginalize the data 
     marg_data = marginalize_kde_data(
         data_nd=samples,
         per_point_bw=per_point_bw,
@@ -251,21 +250,18 @@ def create_marginalized_kde(
         dimension_names=dimension_names
     )
 
-    # Step 2: Determine if we need symmetrization
     # We need symmetrization when both dimensions 0 and 1 are present in keep_dims
     # and when they're the first two dimensions in the marginalized space
-    needs_symmetry = (0 in keep_dims) and (1 in keep_dims)
-    
-    if needs_symmetry:
+    if (0 in keep_dims) and (1 in keep_dims):
         # Map original dims 0,1 to their positions in the marginalized space
-        kept_dims_list = list(keep_dims)
-        sym_dim_0 = kept_dims_list.index(0)
-        sym_dim_1 = kept_dims_list.index(1)
+        keep_dims = list(keep_dims)
+        sym_dim_0 = keep_dims.index(0)
+        sym_dim_1 = keep_dims.index(1)
         symmetrize_dims = [sym_dim_0, sym_dim_1]
     else:
         symmetrize_dims = None
 
-    # Step 3: Create evaluation grid
+    # Create evaluation grid
     grids_to_use = [grid_map[dim] for dim in keep_dims]
 
     if n_dims == 1:
@@ -283,7 +279,7 @@ def create_marginalized_kde(
     else:
         raise ValueError(f"Unsupported number of dimensions: {n_dims}")
 
-    # Step 4: Create KDE with symmetrization if needed
+    # Create KDE with symmetrization if needed
     if 'perpoint_bws' in group:
         train_kde = kde.VariableBwKDEPy(
             marg_data['data'],
