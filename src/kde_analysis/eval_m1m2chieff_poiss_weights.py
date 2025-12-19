@@ -426,7 +426,6 @@ boots_weighted = False
 vt_weights = False  # Flag to control VT weighting
 
 for i in range(opts.end_iter - opts.start_iter):
-    print(i)
     it = i + opts.discard + opts.start_iter
     ilabel = i + opts.start_iter
     if it % 5 == 0: print(it)
@@ -462,6 +461,12 @@ for i in range(opts.end_iter - opts.start_iter):
     bwx = group['bwx'][()]
     bwy = group['bwy'][()]
     bwz = group['bwz'][()]
+    # Check symmetric dimensions: bwx vs bwy for m1-m2 symmetry
+    if not np.isclose(bwx, bwy, rtol=1e-8, atol=0.0):
+        print(f"WARNING: bwx != bwy (bwx={bwx}, bwy={bwy}). Setting both to geometric mean.")
+        gm = float(np.sqrt(bwx * bwy))  # valid for [0, 1]
+        bwx = gm
+        bwy = gm
     # Create the KDE with mass symmetry
     m1 = samples[:, 0]  # First column corresponds to m1
     m2 = samples[:, 1]  # Second column corresponds to m2
