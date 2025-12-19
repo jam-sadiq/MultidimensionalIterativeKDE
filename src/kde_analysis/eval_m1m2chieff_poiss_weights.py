@@ -193,7 +193,6 @@ def create_marginalized_kde(
     m2grid,
     cfgrid,
     alpha,
-    group,
     dimension_names=None
 ):
     """
@@ -204,8 +203,8 @@ def create_marginalized_kde(
     ----------
     samples : np.ndarray, shape (n_samples, 3)
         Original 3D samples
-    per_point_bw : np.ndarray, shape (n_samples,)
-        Scalar per-point bandwidth for each sample
+    per_point_bw : np.ndarray or None, shape (n_samples,)
+        Scalar per-point bandwidth for each sample. If None, uses AdaptiveBwKDE with alpha.
     keep_dims : list of int
         Dimensions to keep (e.g., [0,1] for 2D, [0] for 1D, [0,1,2] for 3D)
     input_transf : tuple
@@ -217,9 +216,7 @@ def create_marginalized_kde(
     m1grid, m2grid, cfgrid : np.ndarray
         Grid arrays for each dimension
     alpha : float
-        Adaptive bandwidth parameter (only used if 'perpoint_bws' not in group)
-    group : h5py.Group
-        HDF5 group containing 'perpoint_bws' key
+        Adaptive bandwidth parameter (only used if per_point_bw is None)
     dimension_names : list, optional
         Names of dimensions (default: ['m1', 'm2', 'chieff'])
 
@@ -280,7 +277,8 @@ def create_marginalized_kde(
         raise ValueError(f"Unsupported number of dimensions: {n_dims}")
 
     # Create KDE with symmetrization if needed
-    if 'perpoint_bws' in group:
+    # Use VariableBwKDEPy if per_point_bw is provided, otherwise AdaptiveBwKDE
+    if per_point_bw is not None:
         train_kde = kde.VariableBwKDEPy(
             marg_data['data'],
             marg_data['weights'],
@@ -300,7 +298,6 @@ def create_marginalized_kde(
             alpha=alpha,
             symmetrize_dims=symmetrize_dims
         )
-
 
     # Evaluate KDE
     eval_kde = train_kde.evaluate_with_transf(eval_samples)
@@ -495,7 +492,6 @@ for i in range(opts.end_iter - opts.start_iter):
             'm2grid': m2grid,
             'cfgrid': cfgrid,
             'alpha': alpha,
-            'group': group,
             'dimension_names': ['m1', 'm2', 'chieff']
         }
 
