@@ -55,6 +55,8 @@ std1 = []
 std2 = []
 std3 = []
 
+flat_vt = []
+
 for i in range(opts.end_iter - opts.start_iter):
     it = i + opts.discard + opts.start_iter
     iter_name = f'iteration_{it}'
@@ -80,9 +82,12 @@ for i in range(opts.end_iter - opts.start_iter):
     bw3.append(hdf[iter_name]['bwz'][...])
     alp.append(hdf[iter_name]['alpha'][...])
 
+    flat_vt.append(hdf[iter_name]['rwvt_vals'][...])
+
 flat_samples1 = np.concatenate(flat_samples1)
 flat_samples2 = np.concatenate(flat_samples2)
 flat_samples3 = np.concatenate(flat_samples3)
+flat_vt = np.concatenate(flat_vt) / 1e9  # Convert to Gpc^3 yr
 
 #myfilt = (flat_samples3 > 0.75) & (abs((flat_samples1) - 30) < 5)
 #print(flat_samples1[myfilt])
@@ -112,6 +117,15 @@ plt.grid(True)
 plt.savefig(opts.pathplot+f'sample_std_iters{tag}.png')
 plt.close()
 
+# for m1m2 case, bwx and bwy should be the same
+#plt.plot(bw1, bw2, '+', ms=4)
+#plt.plot([0.08, 0.7], [0.08, 0.7], 'k--', linewidth=1)
+#plt.loglog()
+#plt.xlabel('bwx')
+#plt.ylabel('bwy')
+#plt.savefig(opts.pathplot+f'bwx_v_bwy{tag}.png')
+#plt.close()
+
 plt.plot(std3, bw3, '+', ms=3)
 plt.semilogy()
 plt.xlabel(r'std$(z)$')
@@ -119,12 +133,12 @@ plt.ylabel('bwz')
 plt.savefig(opts.pathplot+f'stdz_v_bwz{tag}.png')
 plt.close()
 
-plt.plot(alp, bw3, '+', ms=3)
-plt.semilogy()
-plt.xlabel(r'alpha')
-plt.ylabel('bwz')
-plt.savefig(opts.pathplot+f'alpha_v_bwz{tag}.png')
-plt.close()
+#plt.plot(alp, bw3, '+', ms=3)
+#plt.semilogy()
+#plt.xlabel(r'alpha')
+#plt.ylabel('bwz')
+#plt.savefig(opts.pathplot+f'alpha_v_bwz{tag}.png')
+#plt.close()
 
 
 # 1d histograms
@@ -152,7 +166,7 @@ plt.hist(flat_samples3[in_midpeak], bins=50, weights=invt_mid, histtype='step', 
 cfkde = gaussian_kde(flat_samples3[in_midpeak], weights=invt_mid, bw_method=0.2)
 xplot = np.linspace(-0.8, 0.8, 800)
 plt.plot(xplot, cfkde.evaluate(xplot))
-plt.xlabel(r'$\chi_{\rm eff}$ ($27 < m_1 < 49$)')
+plt.xlabel(r'$\chi_{\rm eff}$ ($27 < m_1 < 49$, $1/VT$ weighted)')
 plt.savefig(opts.pathplot+f'rwsample_hist_chieffmidpeak{tag}.png')
 plt.close()
 
@@ -163,7 +177,7 @@ qkde = gaussian_kde(np.concatenate((q, 1. / q)),
                     weights=np.concatenate((invt_mid, invt_mid)), bw_method=0.04)
 xplot = np.linspace(0.15, 1, 170)
 plt.plot(xplot, 2. * qkde.evaluate(xplot))
-plt.xlabel(r'$q$ ($27 < m_1 < 49$)')
+plt.xlabel(r'$q$ ($27 < m_1 < 49$, $1/VT$ weighted)')
 plt.savefig(opts.pathplot+f'rwsample_hist_qmidpeak{tag}.png')
 plt.close()
 """
