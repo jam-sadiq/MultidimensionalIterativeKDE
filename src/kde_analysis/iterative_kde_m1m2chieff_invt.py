@@ -4,6 +4,7 @@ import numpy as np
 from popde import density_estimate as d, adaptive_kde as ad
 import priors_vectorize as spin_prior
 from matplotlib import use
+use('agg')
 import matplotlib.pyplot as plt
 from matplotlib import rcParams
 from matplotlib.colors import PowerNorm
@@ -18,12 +19,12 @@ rcParams.update({
     "text.usetex": True,
     "font.serif": "Computer Modern",
     "font.family": "Serif",
-    "xtick.labelsize": 18,
-    "ytick.labelsize": 18,
+    "xtick.labelsize": 14,
+    "ytick.labelsize": 14,
     "xtick.direction": "in",
     "ytick.direction": "in",
-    "legend.fontsize": 18,
-    "axes.labelsize": 18,
+    "legend.fontsize": 14,
+    "axes.labelsize": 14,
     "axes.grid": True,
     "grid.color": 'grey',
     "grid.linewidth": 1.0,
@@ -52,9 +53,9 @@ parser.add_argument('--pe-chieff-prior', action='store_true',
 parser.add_argument('--min-bw3', default=0.01, type=float, help='Set a minimum bandwidth for the 3rd dimension')
 
 # Buffer iterations
-parser.add_argument('--buffer-start', default=200, type=int, help='Start iteration for buffer in reweighting')
-parser.add_argument('--buffer-interval', default=100, type=int, help='Size of buffer')
-parser.add_argument('--n-iterations', type=int, help='Total reweighting iterations after start of buffer')
+parser.add_argument('--buffer-start', default=0, type=int, help='Start iteration for buffer in reweighting')
+parser.add_argument('--buffer-interval', required=True, type=int, help='Size of buffer')
+parser.add_argument('--n-iterations', required=True, type=int, help='Total reweighting iterations after start of buffer')
 
 # Output
 parser.add_argument('--pathplot', default='./', help='public_html path for plots', type=str)
@@ -150,7 +151,7 @@ def prior_factor_function(samples, redshift_vals, redshift_prior_power):
     return prior_factors
 
 
-def get_reweighted_sample(rng, sample, redshiftvals, vt_vals, fpop_kde, prior_func=prior_factor_function, prior_factor_kwargs={}):
+def get_reweighted_sample(rng, sample, redshiftvals, vt_vals, fpop_kde, reweight=True, prior_func=prior_factor_function, prior_factor_kwargs={}):
     """
     Generate reweighted random sample/samples from the original PE samples
 
@@ -166,7 +167,7 @@ def get_reweighted_sample(rng, sample, redshiftvals, vt_vals, fpop_kde, prior_fu
     redshiftvals : array-like
         Sample redshift values used to compute prior factors.
 
-    vt_vals : array-like
+    vt_vals : array-like or None
         The sensitive volume time values for each sample, used to scale the KDE estimate.
 
     fpop_kde : KDE object
@@ -180,25 +181,31 @@ def get_reweighted_sample(rng, sample, redshiftvals, vt_vals, fpop_kde, prior_fu
 
     Returns
     --------
-    (float), (float), (array)
-        Randomly selected weighted sample, its VT value and array of weights
+    (float), (int), (array)
+        Randomly selected weighted sample, its index, and array of weights
     """
     # Ensure prior_factor_kwargs is a dictionary
     if prior_factor_kwargs is None:
         prior_factor_kwargs = {}
 
-    # Evaluate the KDE estimate of the astrophysical population at samples
-    fkde_samples = fpop_kde.evaluate_with_transf(sample) / vt_vals
+    if vt_vals is None:  # No-op
+        vt_vals = np.ones_like(sample[:, 0])
 
-    # Adjust probabilities based on the prior factor
-    frate_atsample = fkde_samples * prior_func(sample, redshiftvals, **prior_factor_kwargs)
-    # Normalize
-    fpop_at_samples = frate_atsample / frate_atsample.sum()
+    if reweight:
+        # Evaluate the KDE estimate of the astrophysical population at samples
+        fkde_samples = fpop_kde.evaluate_with_transf(sample) / vt_vals
+
+        # Adjust probabilities based on the prior factor
+        frate_atsample = fkde_samples * prior_func(sample, redshiftvals, **prior_factor_kwargs)
+        # Normalize
+        fpop_at_samples = frate_atsample / frate_atsample.sum()
+    else:
+        fpop_at_samples = np.ones_like(vt_vals) / len(vt_vals)  # Equal weights
 
     # Select a sample using weighted random sampling
     selected_idx = rng.choice(len(sample), p=fpop_at_samples)
 
-    return sample[selected_idx], vt_vals[selected_idx], fpop_at_samples
+    return sample[selected_idx], selected_idx, fpop_at_samples
 
 
 def buffer_reweighted_sample(rng, sample, redshiftvals, vt_vals, meanKDEevent, prior_factor=prior_factor_function, prior_factor_kwargs=None):
@@ -228,12 +235,15 @@ def buffer_reweighted_sample(rng, sample, redshiftvals, vt_vals, meanKDEevent, p
 
     Returns
     --------
-    (float), (float), (array)
-        Randomly selected weighted sample, its VT value and array of weights
+    (float), (int), (array)
+        Randomly selected weighted sample, its index, and array of weights
     """
     # Ensure prior_factor_kwargs is a dictionary
     if prior_factor_kwargs is None:
         prior_factor_kwargs = {}
+
+    if vt_vals is None:  # No-op
+        vt_vals = np.ones_like(sample[:, 0])
 
     # Compute KDE probabilities divided by sensitivity
     kde_by_vt = meanKDEevent / vt_vals
@@ -247,7 +257,7 @@ def buffer_reweighted_sample(rng, sample, redshiftvals, vt_vals, meanKDEevent, p
     # Select a sample using weighted random sampling
     selected_idx = rng.choice(len(sample), p=norm_meankdevals)
 
-    return sample[selected_idx], vt_vals[selected_idx], norm_meankdevals
+    return sample[selected_idx], selected_idx, norm_meankdevals
 
 
 def get_kde_obj_eval(sample, bs_weights, rescale_arr, alpha, input_transf=('log', 'log', 'none'), mass_symmetry=False, minbw3=opts.min_bw3):
@@ -264,13 +274,14 @@ def get_kde_obj_eval(sample, bs_weights, rescale_arr, alpha, input_transf=('log'
     kde_object = ad.KDERescaleOptimization(sample, bs_weights, input_transf=input_transf, stdize=True,
         rescale=rescale_arr, symmetrize_dims=symm_dims, alpha=alpha, dim_names=['lnm1', 'lnm2', 'chieff']
     )
-    dictopt, score = kde_object.optimize_rescale_parameters(
+    # In mass symmetry case optimizes only over bw0 and bw2, imposing bw1=bw0
+    optrescale, optalpha, score = kde_object.optimize_rescale_parameters(
         rescale_arr, alpha, bounds=((0.01, 100), (0.01, 100), (0.01, 1./ minbw3), (0, 1)), disp=False
     )  # don't display messages
-    optbwds = 1. / dictopt[0:-1]
-    optalpha = dictopt[-1]
+    optbws = 1. / optrescale
+    if mass_symmetry: assert optbws[0] == optbws[1]
 
-    return kde_object, optbwds, optalpha
+    return kde_object, optbws, optalpha
 
 
 #######################################################################
@@ -280,13 +291,15 @@ def get_kde_obj_eval(sample, bs_weights, rescale_arr, alpha, input_transf=('log'
 run_opt = 'o4' if opts.pdet_runs == 'o4' else 'o3'
 print(run_opt)
 injsources = 'all' if run_opt == 'o4' else 'bbh'
-dmid_fun = 'Dmid_mchirp_fdmid_fspin'
-emax_fun = 'emax_exp'
+dmid_fun = 'Dmid_mchirp_mixture_logspin_corr'  # O4a fit function
+emax_fun = 'emax_gaussian'  # O4 fit function
 pdet = pdet_fit.Found_injections(dmid_fun=dmid_fun, emax_fun=emax_fun, alpha_vary=None, ini_files=None)
 pdet.get_opt_params(run_opt, sources=injsources, rescale_o3=False)
 pdet.set_shape_params()
-pdet.load_inj_set(run_opt, source=injsources)
+print('About to load inj set ...')
+pdet.load_inj_set(run_opt, source=injsources)  # Currently need to use dL pdf interpolator in VT
 
+print('Getting PE samples ...')
 fz = h5.File(opts.samples_redshift, 'r')
 dz = fz['randdata']
 fdL = h5.File(opts.samples_dl, 'r')
@@ -304,10 +317,10 @@ mean2 = f2['initialdata/original_mean'][...]
 mean3 = f3['initialdata/original_mean'][...]
 
 eventlist = []
-sampleslists1 = []
-sampleslists2 = []
-sampleslists3 = []
-redshiftlists = []
+sampleslist1 = []
+sampleslist2 = []
+sampleslist3 = []
+redshiftlist = []
 
 if opts.pdet_runs == 'o1o2o3':
     pdet.runs = ['o1', 'o2', 'o3']  # Otherwise uses o1-o4 ...
@@ -318,8 +331,9 @@ elif opts.pdet_runs == 'o4':
     sensitivity = lambda m1, m2, chieff: \
                       pdet.sensitive_volume('o4', m1, m2, chieff, zmax=2.5)
     print('o4 approximation, pdet runs are', pdet.runs)
+
 vth5file = h5.File(opts.samples_vt, "a")  # create if file does not exist
-vtlists = []
+vtlist = []
 
 for evid, k in enumerate(d1.keys()):
     eventlist.append(k)
@@ -366,11 +380,11 @@ for evid, k in enumerate(d1.keys()):
             vt_val[i] = sensitivity(m1_val[i], m2_val[i], chieff=chieff_val[i])
         vth5file.create_dataset(k, data=np.array(vt_val))
 
-    vtlists.append(vt_val)
-    sampleslists1.append(m1_val)
-    sampleslists2.append(m2_val)
-    sampleslists3.append(chieff_val)
-    redshiftlists.append(z_val)
+    vtlist.append(vt_val)
+    sampleslist1.append(m1_val)
+    sampleslist2.append(m2_val)
+    sampleslist3.append(chieff_val)
+    redshiftlist.append(z_val)
 
 f1.close()
 f2.close()
@@ -379,10 +393,10 @@ fz.close()
 fdL.close()
 vth5file.close()
 
-flat_samples1 = np.concatenate(sampleslists1).flatten()
-flat_samples2 = np.concatenate(sampleslists2).flatten()
-flat_samples3 = np.concatenate(sampleslists3).flatten()
-flat_vtlist = np.concatenate(vtlists).flatten()
+flat_samples1 = np.concatenate(sampleslist1).flatten()
+flat_samples2 = np.concatenate(sampleslist2).flatten()
+flat_samples3 = np.concatenate(sampleslist3).flatten()
+flat_vtlist = np.concatenate(vtlist).flatten()
 #print("min max m1 =", np.min(flat_samples1), np.max(flat_samples1))
 #print("min max m2 =", np.min(flat_samples2), np.max(flat_samples2))
 #print("min max chieff =", np.min(flat_samples3), np.max(flat_samples3))
@@ -396,6 +410,17 @@ for i, tupl in enumerate(zip([flat_samples1, flat_samples2, flat_samples3], [Tru
     else: plt.xlabel(fr'$x_{i+1}$')
     plt.savefig(opts.pathplot+f'sample_hist_x{i+1}.png')
     plt.close()
+# mtotal
+mtot = flat_samples1 + flat_samples2
+plt.hist(np.log10(mtot), bins=100, histtype='step')
+plt.xlabel(r'log$_{10} (m_1+m_2)$')
+plt.savefig(opts.pathplot+f'sample_hist_mtotal.png')
+plt.close()
+# mchirp
+plt.hist(np.log10((flat_samples1 * flat_samples2)**0.6 / mtot**0.2), bins=100, histtype='step')
+plt.xlabel(r'log$_{10} \mathcal{M}$')
+plt.savefig(opts.pathplot+f'sample_hist_mchirp.png')
+plt.close()
 
 # 2d histograms : color ~ nsamples^-0.5
 plt.figure(figsize=(8, 6))
@@ -413,7 +438,6 @@ plt.hist2d(np.log10(flat_samples2), flat_samples3, bins=100, norm=PowerNorm(gamm
 plt.xlabel(r'log$_{10} x_2$'); plt.ylabel(r'$x_3$')
 plt.savefig(opts.pathplot+f'sample_hist_x2x3.png'); plt.close()
 
-#exit()
 # Scatter plots for pdet
 def eta_from_mass1_mass2(mass1, mass2):
     return mass1 * mass2 / (mass1 + mass2)**2.
@@ -421,22 +445,22 @@ def eta_from_mass1_mass2(mass1, mass2):
 def mchirp_from_mass1_mass2(mass1, mass2):
     return eta_from_mass1_mass2(mass1, mass2)**(3./5) * (mass1 + mass2)
 
-Mchirp = mchirp_from_mass1_mass2(flat_samples1, flat_samples2)
-u_plot.plot_pdet_scatter(Mchirp, flat_samples3, flat_vtlist, xlabel=r'$\mathcal{M}$', ylabel=r'$\chi_\mathrm{eff}$', title=r'$VT$', save_name="VT_mc_chieff_scatter.png", pathplot=opts.pathplot)
-u_plot.plot_pdet_scatter(flat_samples2/flat_samples1, flat_samples3, flat_vtlist, xlabel=r'$q$', ylabel=r'$\chi_\mathrm{eff}$', title=r'$VT$', save_name="VT_q_chieff_scatter.png", pathplot=opts.pathplot)
+mchirp = mchirp_from_mass1_mass2(flat_samples1, flat_samples2)
+u_plot.plot_pdet_scatter(mchirp, flat_samples3, flat_vtlist, xlabel=r'$\mathcal{M}$', ylabel=r'$\chi_\mathrm{eff}$', save_name="VT_mc_chieff_scatter.png", pathplot=opts.pathplot)
+u_plot.plot_pdet_scatter(flat_samples2/flat_samples1, flat_samples3, flat_vtlist, xlabel=r'$q$', ylabel=r'$\chi_\mathrm{eff}$', save_name="VT_q_chieff_scatter.png", pathplot=opts.pathplot)
 
-# 3D scatter plot
-u_plot.plot_pdet_3Dscatter(flat_samples1, flat_samples2, flat_samples3, flat_vtlist, save_name="pdet_m1m2chieff_3Dscatter.png", pathplot=opts.pathplot)
+# 3d scatter plot
+u_plot.plot_pdet_3Dscatter(flat_samples1, flat_samples2, flat_samples3, flat_vtlist, save_name="pdet_m1m2chieff_3dscatter.png", pathplot=opts.pathplot)
 
 
 ##########################################
-sampleslists = np.vstack((flat_samples1, flat_samples2, flat_samples3)).T
 mean_sample = np.vstack((mean1, mean2, mean3)).T
 
-init_rescale = [3., 3., 3.]
+# Two distinct values: one for m1 and m2, the other for chieff
+init_rescale = [4., 4., 2.]
 init_alpha = 0.5
 
-# First mean samples KDE (no weights)
+# First mean samples KDE without weighting
 current_kde, bws, alp = get_kde_obj_eval(mean_sample, None, init_rescale, init_alpha, mass_symmetry=True, input_transf=('log', 'log', 'none'), minbw3=opts.min_bw3)
 print('Initial opt parameters', bws, alp)
 
@@ -469,52 +493,96 @@ iterminneff = []
 num_events = len(mean1)
 buffers = [[] for _ in range(num_events)]  # List of arrays of KDE values at samples for each event
 
+# Initialize VT weights for kernels
+current_vts = np.array([np.mean(vt) for vt in vtlist])
+
 rng = np.random.default_rng()
-for i in range(opts.n_iterations + discard):  # eg 500 + 200
-    # Take 1 reweighted PE sample per event and weight it in KDE evaluation and optimization by a Poisson bootstrap factor
+for i in range(opts.n_iterations + discard):
+    # Take 1 reweighted PE sample per event and weight it in KDE evaluation and optimization by an exponential bootstrap factor
     rwsamples = []
     rw_neff = []  # Effective number of samples from fpop/prior weighting
     rwvt_vals = []
     boots_weights = []
+
+    # Doctor the KDE to have 1/VT weights for buffer evaluation
+    current_kde.kde_weights = 1. / current_vts
+    current_kde.normalize_weights()
+    current_kde.kde_weights = np.tile(current_kde.kde_weights, 2)  # Symmetrize
+    # Reassign KDE object weights
+    #print(current_kde.kde_data.shape, current_kde.kde_weights.shape)
+    current_kde.fit_KDEpy()#(printw=True)
+
     # Loop over events
-    for eventid, (samplem1, samplem2, sample3, redshiftvals, vt_k) in \
-            enumerate(zip(sampleslists1, sampleslists2, sampleslists3, redshiftlists, vtlists)):
-        event_boots_weight = rng.poisson(1)
-        if event_boots_weight == 0:  # Immediately discard cases with zero weight
-            continue
+    for eventid, (samplem1, samplem2, sample3, samplez, samplevt) in \
+            enumerate(zip(sampleslist1, sampleslist2, sampleslist3, redshiftlist, vtlist)):
+
+        # Fill buffer and/or determine weights by evaluating previous KDE on all samples
         samples = np.vstack((samplem1, samplem2, sample3)).T
-        # Determine weights for next draw by evaluating previous KDE on all samples
+
         event_kde = current_kde.evaluate_with_transf(samples)
         buffers[eventid].append(event_kde)
 
-        if i < discard + Nbuffer:  # eg if less than 200 + 100
-            rwsample, rwvt_val, rweights = get_reweighted_sample(rng, samples, redshiftvals, vt_k, current_kde, prior_factor_kwargs=prior_kwargs)
-        else:  # start to reweight based on buffer
-            # Use average of previous Nbuffer KDE evaluations on samples
+        # Build up non-reweighted / non-bootstrap population to start without attempting to be accurate
+        if i < discard + Nbuffer:
+            event_boots_weight = 1
+            rwsample, sid, rweights = get_reweighted_sample(rng, samples, samplez, None, current_kde, reweight=False, prior_factor_kwargs=prior_kwargs)
+        else:  # After buffer is filled, start to reweight and bootstrap
+            event_boots_weight = rng.exponential(scale=1.)
+            if event_boots_weight == 0:  # Immediately discard cases with zero weight
+                continue
+            # Use average of previous Nbuffer KDE evaluations on samples:
+            # density is already 'astrophysical' as 1/VT weights are used in KDE
             means_kde_event = np.mean(buffers[eventid][-Nbuffer:], axis=0)
-            rwsample, rwvt_val, rweights = buffer_reweighted_sample(rng, samples, redshiftvals, vt_k, means_kde_event, prior_factor_kwargs=prior_kwargs)
+            rwsample, sid, rweights = buffer_reweighted_sample(rng, samples, samplez, None, means_kde_event, prior_factor_kwargs=prior_kwargs)
+
         rwsamples.append(rwsample)
         rw_neff.append(Neff(rweights))
-        rwvt_vals.append(rwvt_val)
+        rwvt_vals.append(samplevt[sid])
         boots_weights.append(event_boots_weight)
 
-    # Reassign current KDE to optimized estimate for this iteration
-    current_kde, optbw, optalp = get_kde_obj_eval(np.array(rwsamples), np.array(boots_weights), init_rescale, init_alpha, mass_symmetry=True, input_transf=('log', 'log', 'none'), minbw3=opts.min_bw3)
-    # Get perpoint bandwidths
+    rwsamples = np.array(rwsamples)
+    rwvt_vals = np.array(rwvt_vals)  # Keep track of VTs for next iteration
+    boots_weights = np.array(boots_weights)
+
+    # Obtain optimized KDE for this iteration using only bootstrap weights
+    try:  # Very small weights may cause adaptive KDE problems
+        current_kde, optbw, optalp = get_kde_obj_eval(rwsamples, boots_weights, init_rescale, init_alpha, mass_symmetry=True, input_transf=('log', 'log', 'none'), minbw3=opts.min_bw3)
+        # If this works, vts are OK to pass through
+        current_vts = rwvt_vals.copy()
+
+    except ValueError as verr:
+        print(verr)
+        print('min bootstrap weight:', boots_weights.min())
+        # Remove sample with smallest weight and try again
+        minid = boots_weights.argmin()
+
+        try:
+            # Remove sample with smallest weight and try again
+            rwsamples = np.delete(rwsamples, minid, axis=0)
+            boots_weights = np.delete(boots_weights, minid)
+            current_kde, optbw, optalp = get_kde_obj_eval(rwsamples, boots_weights, init_rescale, init_alpha, mass_symmetry=True, input_transf=('log', 'log', 'none'), minbw3=opts.min_bw3)
+            # If this works, remove vt entry and pass through
+            current_vts = rwvt_vals.copy()
+            current_vts = np.delete(current_vts, minid)
+
+        except ValueError:  # failsafe at the expense of repeating a KDE
+            print(f'min bootstrap weight {boots_weights.min()} - giving up, keeping KDE unchanged this iteration!')
+            # Here if both tries fail, samples / weights / current_vts are not reassigned (ie remain unchanged)
+
+    # Get per point bandwidths: take only the second half of the symmetrized points
     perpointbws = current_kde.bandwidth[:len(rwsamples)]
     print("opt bw", optbw, "opt alpha", optalp, 'Neff min/max', np.min(rw_neff), np.max(rw_neff), 'min eventid', np.argmin(rw_neff))
 
-    group = frateh5.create_group(f'iteration_{i}')
-
     # Save iteration data
-    group.create_dataset('rwsamples', data=np.array(rwsamples))
-    group.create_dataset('perpoint_bws', data=np.array(perpointbws))
-    group.create_dataset('rwvt_vals', data=np.array(rwvt_vals))
-    group.create_dataset('bootstrap_weights', data=np.array(boots_weights))
-    group.create_dataset('alpha', data=optalp)
-    group.create_dataset('bwx', data=optbw[0])
-    group.create_dataset('bwy', data=optbw[1])
-    group.create_dataset('bwz', data=optbw[2])
+    it = frateh5.create_group(f'iteration_{i}')
+    it.create_dataset('rwsamples', data=rwsamples)
+    it.create_dataset('perpoint_bws', data=perpointbws)
+    it.create_dataset('rwvt_vals', data=current_vts)
+    it.create_dataset('bootstrap_weights', data=boots_weights)
+    it.create_dataset('alpha', data=optalp)
+    it.create_dataset('bwx', data=optbw[0])
+    it.create_dataset('bwy', data=optbw[1])
+    it.create_dataset('bwz', data=optbw[2])
     frateh5.flush()
 
     iterbwx.append(optbw[0])
