@@ -51,7 +51,7 @@ parser.add_argument('--pe-chieff-prior', action='store_true',
 
 # Rescaling factor bounds [bandwidth]
 parser.add_argument('--min-bw3', default=0.01, type=float, help='Set a minimum bandwidth for the 3rd dimension')
-parser.add_argument('--bandwidth-prior', default=None, type=float, help='apply bandwidth prior on optmized bw and alpha, default is 0.01')
+parser.add_argument('--bandwidth-prior', default=None, type=float, help='Prior term to control bandwidth optimization')
 
 # Buffer iterations
 parser.add_argument('--buffer-start', default=0, type=int, help='Start iteration for buffer in reweighting')
