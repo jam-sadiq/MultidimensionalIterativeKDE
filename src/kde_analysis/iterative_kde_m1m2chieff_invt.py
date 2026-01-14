@@ -51,6 +51,7 @@ parser.add_argument('--pe-chieff-prior', action='store_true',
 
 # Rescaling factor bounds [bandwidth]
 parser.add_argument('--min-bw3', default=0.01, type=float, help='Set a minimum bandwidth for the 3rd dimension')
+parser.add_argument('--bandwidth-prior', default=None, type=float, help='Prior term to control bandwidth optimization')
 
 # Buffer iterations
 parser.add_argument('--buffer-start', default=0, type=int, help='Start iteration for buffer in reweighting')
@@ -260,7 +261,7 @@ def buffer_reweighted_sample(rng, sample, redshiftvals, vt_vals, meanKDEevent, p
     return sample[selected_idx], selected_idx, norm_meankdevals
 
 
-def get_kde_obj_eval(sample, bs_weights, rescale_arr, alpha, input_transf=('log', 'log', 'none'), mass_symmetry=False, minbw3=opts.min_bw3):
+def get_kde_obj_eval(sample, bs_weights, rescale_arr, alpha, input_transf=('log', 'log', 'none'), mass_symmetry=False, minbw3=opts.min_bw3, bandwidth_prior=opts.bandwidth_prior):
     if bs_weights is not None:
         # Remove samples with zero bootstrap weight as they may have bad behaviour in
         # adaptive KDE (due to extremely small pilot density at the sample location)
@@ -272,8 +273,7 @@ def get_kde_obj_eval(sample, bs_weights, rescale_arr, alpha, input_transf=('log'
     symm_dims = [0, 1] if mass_symmetry else None
 
     kde_object = ad.KDERescaleOptimization(sample, bs_weights, input_transf=input_transf, stdize=True,
-        rescale=rescale_arr, symmetrize_dims=symm_dims, alpha=alpha, dim_names=['lnm1', 'lnm2', 'chieff']
-    )
+        rescale=rescale_arr, symmetrize_dims=symm_dims, alpha=alpha, dim_names=['lnm1', 'lnm2', 'chieff'], bandwidth_prior=bandwidth_prior)
     # In mass symmetry case optimizes only over bw0 and bw2, imposing bw1=bw0
     optrescale, optalpha, score = kde_object.optimize_rescale_parameters(
         rescale_arr, alpha, bounds=((0.01, 100), (0.01, 100), (0.01, 1./ minbw3), (0, 1)), disp=False
