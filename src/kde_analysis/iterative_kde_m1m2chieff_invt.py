@@ -4,7 +4,7 @@ import numpy as np
 from popde import density_estimate as d, adaptive_kde as ad
 import priors_vectorize as spin_prior
 from matplotlib import use
-#use('agg')
+use('agg')
 import matplotlib.pyplot as plt
 from matplotlib import rcParams
 from matplotlib.colors import PowerNorm
