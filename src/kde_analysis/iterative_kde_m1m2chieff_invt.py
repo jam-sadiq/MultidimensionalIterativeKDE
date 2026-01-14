@@ -4,7 +4,7 @@ import numpy as np
 from popde import density_estimate as d, adaptive_kde as ad
 import priors_vectorize as spin_prior
 from matplotlib import use
-use('agg')
+#use('agg')
 import matplotlib.pyplot as plt
 from matplotlib import rcParams
 from matplotlib.colors import PowerNorm
@@ -51,6 +51,7 @@ parser.add_argument('--pe-chieff-prior', action='store_true',
 
 # Rescaling factor bounds [bandwidth]
 parser.add_argument('--min-bw3', default=0.01, type=float, help='Set a minimum bandwidth for the 3rd dimension')
+parser.add_argument('--bandwidth-prior', default=0.01, type=float, help='apply bandwidth prior on optmized bw and alpha, default is 0.01')
 
 # Buffer iterations
 parser.add_argument('--buffer-start', default=0, type=int, help='Start iteration for buffer in reweighting')
@@ -260,7 +261,7 @@ def buffer_reweighted_sample(rng, sample, redshiftvals, vt_vals, meanKDEevent, p
     return sample[selected_idx], selected_idx, norm_meankdevals
 
 
-def get_kde_obj_eval(sample, bs_weights, rescale_arr, alpha, input_transf=('log', 'log', 'none'), mass_symmetry=False, minbw3=opts.min_bw3):
+def get_kde_obj_eval(sample, bs_weights, rescale_arr, alpha, input_transf=('log', 'log', 'none'), mass_symmetry=False, minbw3=opts.min_bw3, bandwidth_prior=opts.bandwidth_prior):
     if bs_weights is not None:
         # Remove samples with zero bootstrap weight as they may have bad behaviour in
         # adaptive KDE (due to extremely small pilot density at the sample location)
@@ -271,9 +272,11 @@ def get_kde_obj_eval(sample, bs_weights, rescale_arr, alpha, input_transf=('log'
     # Apply m1-m2 symmetry in the samples when making KDEs
     symm_dims = [0, 1] if mass_symmetry else None
 
+    #kde_object = ad.KDERescaleOptimization(sample, bs_weights, input_transf=input_transf, stdize=True,
+    #    rescale=rescale_arr, symmetrize_dims=symm_dims, alpha=alpha, dim_names=['lnm1', 'lnm2', 'chieff']
+    #)
     kde_object = ad.KDERescaleOptimization(sample, bs_weights, input_transf=input_transf, stdize=True,
-        rescale=rescale_arr, symmetrize_dims=symm_dims, alpha=alpha, dim_names=['lnm1', 'lnm2', 'chieff']
-    )
+        rescale=rescale_arr, symmetrize_dims=symm_dims, alpha=alpha, dim_names=['lnm1', 'lnm2', 'chieff'], bandwidth_prior=bandwidth_prior)
     # In mass symmetry case optimizes only over bw0 and bw2, imposing bw1=bw0
     optrescale, optalpha, score = kde_object.optimize_rescale_parameters(
         rescale_arr, alpha, bounds=((0.01, 100), (0.01, 100), (0.01, 1./ minbw3), (0, 1)), disp=False
