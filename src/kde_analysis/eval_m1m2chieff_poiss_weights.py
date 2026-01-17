@@ -615,5 +615,5 @@ rate_m2chieff_med = np.percentile(RateM2chieff[:], 50, axis=0)
 
 u_plot.m1m2_contour(mean1, mean2, M1, M2, rate_m1m2_med, timesM=True, itertag=f'{ilabel}', pathplot=opts.pathplot, plot_name='Rate')
 u_plot.m_chieff_contour(mean1, mean3, M, CF, rate_m1chieff_med, timesM=True, itertag=f'{ilabel}', pathplot=opts.pathplot, plot_name='Rate', xlabel='m_1')
-u_plot.m_chieff_contour(mean1, mean3, M, CF, rate_m2chieff_med, timesM=True, itertag=f'{ilabel}', pathplot=opt.pathplot, plot_name='Rate', xlabel='m_2')
+u_plot.m_chieff_contour(mean1, mean3, M, CF, rate_m2chieff_med, timesM=True, itertag=f'{ilabel}', pathplot=opts.pathplot, plot_name='Rate', xlabel='m_2')
 u_plot.oned_rate_mass(m1grid, m2grid, ratem1_arr, ratem2_arr, tag='', pathplot=opts.pathplot)
