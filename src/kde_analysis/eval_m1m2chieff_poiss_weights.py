@@ -719,7 +719,7 @@ for i in range(opts.end_iter - opts.start_iter):
         # mask  m2 > m1 for plot
         phys = M2 <= M1
         for arr in [rate_2d, mean_chi, std_chi]:
-        arr[~phys] = np.nan
+            arr[~phys] = np.nan
 
         # ---- quick plot ----
         fig, axes = plt.subplots(1, 3, figsize=(15, 4))
