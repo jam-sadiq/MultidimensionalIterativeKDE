@@ -61,6 +61,175 @@ def integral_wrt_chieff(cf_mesh, cf_grid, Rate_3d):
 
     return integm1m2, integchi_m1m2, integchisq_m1m2
 
+#############################################
+# ---------------------------------------------------------------------------
+# Internal helpers
+# we need to access the per-dimension, per-sample kernel values, which KDEpy deliberately hides behind its scalar output?
+# ---------------------------------------------------------------------------
+
+def _gauss_kernel(grid, centers, h):
+    """
+    Evaluate a 1-D Gaussian kernel at all grid points for all kernel centers.
+
+    Parameters
+    ----------
+    grid    : (ngrid,)  evaluation points (in transformed space)
+    centers : (N,)      kernel centres    (in transformed space)
+    h       : (N,)      per-center bandwidth
+
+    Returns
+    -------
+    K : (N, ngrid)   K[i, j] = N(grid[j]; centers[i], h[i]^2)
+    """
+    diff = grid[None, :] - centers[:, None]          # (N, ngrid)
+    return (np.exp(-0.5 * (diff / h[:, None]) ** 2)
+            / (h[:, None] * np.sqrt(2.0 * np.pi)))
+
+
+def _accumulate(K1, K2, scalar_per_sample):
+    """
+    Compute  sum_i  scalar_i * K1[i, j] * K2[i, k]  -> shape (n1, n2)
+    via a single matrix multiply:  (scalar * K1).T  @  K2
+    """
+    return (scalar_per_sample[:, None] * K1).T @ K2
+
+
+def compute_chieff_moments_from_kde(
+    kde_obj,
+    m1grid,
+    m2grid,
+    chi_dim=2,
+    chunk_size=5000,
+):
+    """
+    Analytically compute conditional mean and std of chi_eff over a (m1, m2) grid,
+    reading all kernel parameters directly from a trained KDE object.
+
+    Works with both VariableBwKDEPy and AdaptiveBwKDE instances from
+    density_estimate.py / adaptive_kde.py, fitted with:
+        input_transf=('log', 'log', 'none')
+        stdize=True
+        symmetrize_dims=[0, 1]   (optional but handled automatically)
+
+    Parameters
+    ----------
+    kde_obj   : trained VariableBwKDEPy or AdaptiveBwKDE instance
+    m1grid    : (n1,) array, evaluation grid in original m1 space
+    m2grid    : (n2,) array, evaluation grid in original m2 space
+    chi_dim   : int, which column index is chi_eff (default 2)
+    chunk_size: int, process kernel centers in chunks to limit memory
+
+    Returns
+    -------
+    rate_2d  : (n1, n2)  marginal density R(m1, m2) = integral of p over chi_eff
+    mean_chi : (n1, n2)  E[chi_eff | m1, m2]
+    std_chi  : (n1, n2)  sqrt(Var[chi_eff | m1, m2])
+    """
+
+    # ------------------------------------------------------------------
+    # 1. Extract everything from the trained KDE object
+    # ------------------------------------------------------------------
+    kde_data = kde_obj.kde_data          # (N_eff, 3)  fully transformed data
+    w        = kde_obj.kde_weights       # (N_eff,)    normalised, or None
+    bw       = np.atleast_1d(np.asarray(kde_obj.bandwidth, dtype=float))
+
+    stds   = np.asarray(kde_obj.stds,   dtype=float)   # (3,) std after transf+symm
+    if kde_obj.rescale is not None:
+        rescale = np.asarray(kde_obj.rescale, dtype=float)
+    else:
+        rescale = np.ones(stds.shape)
+
+    N_eff = len(kde_data)
+
+    # Broadcast scalar bandwidth to per-point array
+    if bw.ndim == 0 or len(bw) == 1:
+        bw = np.full(N_eff, float(bw))
+
+    # Uniform weights if none provided
+    if w is None:
+        w = np.ones(N_eff) / N_eff
+    else:
+        w = np.asarray(w, dtype=float)
+        w = w / w.sum()    # ensure normalised
+
+    # ------------------------------------------------------------------
+    # 2. Identify m1 and m2 column indices in kde_data
+    #    (chi_dim gives the chi column; the other two are m1, m2 in order)
+    # ------------------------------------------------------------------
+    all_dims = [0, 1, 2]
+    mass_dims = [d for d in all_dims if d != chi_dim]
+    m1_dim, m2_dim = mass_dims[0], mass_dims[1]
+
+    # Kernel centres in fully transformed space
+    u1_centers = kde_data[:, m1_dim]      # (N_eff,)
+    u2_centers = kde_data[:, m2_dim]      # (N_eff,)
+
+    # Chi centres and kernel widths back in *original* chi space
+    std3     = stds[chi_dim]
+    r3       = rescale[chi_dim]
+    chi_centers  = kde_data[:, chi_dim] * std3 / r3   # (N_eff,)
+    sigma_chi    = bw * std3 / r3                      # (N_eff,)
+
+    # ------------------------------------------------------------------
+    # 3. Evaluation grid in transformed space (same transforms as training)
+    # ------------------------------------------------------------------
+    std1 = stds[m1_dim];   r1 = rescale[m1_dim]
+    std2 = stds[m2_dim];   r2 = rescale[m2_dim]
+
+    # KDE stores: u_d = log(m_d) / std_d * rescale_d
+    u1_grid = np.log(m1grid) / std1 * r1    # (n1,)
+    u2_grid = np.log(m2grid) / std2 * r2    # (n2,)
+
+    n1, n2 = len(m1grid), len(m2grid)
+
+    # ------------------------------------------------------------------
+    # 4. Accumulate moments in chunks  (avoids N_eff × n1 × n2 memory)
+    # ------------------------------------------------------------------
+    c0 = np.zeros((n1, n2))   # int p              over chi  ->  ~ R(m1,m2) * Jac
+    c1 = np.zeros((n1, n2))   # int chi  * p       over chi
+    c2 = np.zeros((n1, n2))   # int chi^2 * p      over chi
+
+    chi2_var = chi_centers ** 2 + sigma_chi ** 2   # (N_eff,)
+
+    for start in range(0, N_eff, chunk_size):
+        sl = slice(start, start + chunk_size)
+
+        K1 = _gauss_kernel(u1_grid, u1_centers[sl], bw[sl])   # (chunk, n1)
+        K2 = _gauss_kernel(u2_grid, u2_centers[sl], bw[sl])   # (chunk, n2)
+        wc = w[sl]
+
+        c0 += _accumulate(K1, K2, wc)
+        c1 += _accumulate(K1, K2, wc * chi_centers[sl])
+        c2 += _accumulate(K1, K2, wc * chi2_var[sl])
+
+    # ------------------------------------------------------------------
+    # 5. Apply remaining Jacobian factors for m1, m2
+    #    evaluate_with_transf applies:
+    #       input Jacobian  : 1/m1 * 1/m2        (from log transforms)
+    #       std   Jacobian  : 1/(std1*std2*std3)
+    #       rescale Jacobian: rescale1*rescale2*rescale3
+    #    The std3/rescale3 terms cancel when integrating over chi, leaving:
+    #       net Jacobian = (1/m1*m2) * (r1*r2)/(s1*s2)
+    # ------------------------------------------------------------------
+    net_jac_factor = (r1 * r2) / (std1 * std2)         # scalar
+    Jac_m = m1grid[:, None] * m2grid[None, :]          # (n1, n2)  the 1/m1/m2 part
+
+    rate_2d = c0 * net_jac_factor / Jac_m
+    c1      = c1 * net_jac_factor / Jac_m
+    c2      = c2 * net_jac_factor / Jac_m
+
+    # ------------------------------------------------------------------
+    # 6. Conditional mean and variance from law of total expectation
+    # ------------------------------------------------------------------
+    safe     = rate_2d > 0
+    mean_chi = np.where(safe, c1 / rate_2d, np.nan)
+    var_chi  = np.where(safe, c2 / rate_2d - mean_chi ** 2, np.nan)
+    var_chi  = np.maximum(var_chi, 0.0)         # guard floating-point negatives
+    std_chi  = np.sqrt(var_chi)
+
+    return rate_2d, mean_chi, std_chi
+###############################################################
+
 
 def get_m_chieff_rate_at_fixed_q(m1grid, m2grid, chieffgrid, Rate_3d, q=1.0):
     """
@@ -533,7 +702,40 @@ for i in range(opts.end_iter - opts.start_iter):
             N=Nev,
             vt_weights=vt_weights
         )
+        # ====================== test chieff mean and std
+        # ---- analytical moments ----
+        train_kde = kde.VariableBwKDEPy(
+                samples,
+                weights,
+                input_transf=('log', 'log', 'none'),
+                stdize=True,
+                rescale=[1/bwx, 1/bwy, 1/bwz],
+                symmetrize_dims=[0,1],
+                bandwidth=per_point_bandwidth
+            )
 
+        rate_2dm1m2, mean_chi, std_chi = compute_chieff_moments_from_kde(
+        train_kde, m1grid, m2grid)
+        # mask  m2 > m1 for plot
+        phys = M2 <= M1
+        for arr in [rate_2d, mean_chi, std_chi]:
+        arr[~phys] = np.nan
+
+        # ---- quick plot ----
+        fig, axes = plt.subplots(1, 3, figsize=(15, 4))
+        titles = ['Rate R(m1,m2)', '<χ_eff|m1,m2>', 'σ(χ_eff|m1,m2)']
+        cmaps  = ['viridis', 'RdBu_r', 'plasma']
+        data   = [rate_2d, mean_chi, std_chi]
+        for ax, d, t, c in zip(axes, data, titles, cmaps):
+            im = ax.pcolormesh(m1grid, m2grid, d.T, cmap=c, shading='auto')
+            plt.colorbar(im, ax=ax)
+            ax.set_xlabel('m1');  ax.set_ylabel('m2')
+            ax.set_title(t)
+            ax.plot([5,100],[5,100],'w--',lw=0.8)
+            ax.loglog()
+        plt.tight_layout()
+        plt.savefig('chieff_moments_from_kde.png', dpi=150, bbox_inches='tight')
+        plt.show()
     else:
         # ========== FULL 3D KDE METHOD ==========
         if 'perpoint_bws' in group:
