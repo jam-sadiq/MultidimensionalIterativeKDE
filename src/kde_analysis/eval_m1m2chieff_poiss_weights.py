@@ -723,7 +723,10 @@ for i in range(opts.end_iter - opts.start_iter):
 
         # ---- quick plot ----
         fig, axes = plt.subplots(1, 3, figsize=(15, 4))
-        titles = ['Rate R(m1,m2)', '<χ_eff|m1,m2>', 'σ(χ_eff|m1,m2)']
+        titles = [
+        r'$R(m_1, m_2)$',
+        r'$\langle \chi_\mathrm{eff} \mid m_1, m_2 \rangle$',
+        r'$\sigma(\chi_\mathrm{eff} \mid m_1, m_2)$']
         cmaps  = ['viridis', 'RdBu_r', 'plasma']
         data   = [rate_2d, mean_chi, std_chi]
         for ax, d, t, c in zip(axes, data, titles, cmaps):
